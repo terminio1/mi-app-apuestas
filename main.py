@@ -221,7 +221,6 @@ with tab1:
         suma_dobles_otros = 0.0
         for b in st.session_state["matriz_actual"]:
             if b["ID"] != boleto_ganador_id:
-                # Comprobar cuántos partidos coinciden
                 m1 = (b["sel1"] == b_ganador["sel1"])
                 m2 = (b["sel2"] == b_ganador["sel2"])
                 m3 = (b["sel3"] == b_ganador["sel3"])
@@ -272,7 +271,7 @@ with tab2:
     else:
         df_historial = pd.DataFrame(st.session_state["historial_apuestas"]).drop(columns=["Detalles"])
 
-        # Aplicar formato visual con colores al Historial
+        # Aplicar formato visual compatible con versiones recientes de Pandas
         def colorear_estado(val):
             if "Victoria" in str(val) or "Ganada" in str(val):
                 return 'background-color: #C8E6C9; color: #2E7D32; font-weight: bold;'
@@ -281,17 +280,13 @@ with tab2:
             else:
                 return 'background-color: #FFF9C4; color: #F57F17; font-weight: bold;'
 
-        st.dataframe(df_historial.style.applymap(colorear_estado, subset=["Estado"]), use_container_width=True)
+        st.dataframe(df_historial.style.map(colorear_estado, subset=["Estado"]), use_container_width=True)
 
         st.subheader("📥 Exportar Matriz Actual o Historial a Excel")
 
-        # Crear archivo Excel dinámico en memoria
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-            # Hoja 1: Resumen de Historial
             df_historial.to_excel(writer, sheet_name='Historial Global', index=False)
-            
-            # Hoja 2: Matriz Actual Detallada (Equipos, Cuotas, Dobles y Trixie)
             if "matriz_actual" in st.session_state:
                 df_mat = pd.DataFrame(st.session_state["matriz_actual"]).drop(columns=["c1", "c2", "c3", "sel1", "sel2", "sel3"])
                 df_mat.to_excel(writer, sheet_name='Matriz_Detallada_Boletos', index=False)
