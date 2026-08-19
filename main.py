@@ -23,14 +23,14 @@ st.set_page_config(
 # --- CSS PERSONALIZADO ---
 st.markdown("""
 <style>
-    /* Fondo General: Verde claro suave (el que tenía antes el cuadro) */
+    /* Fondo General: Verde claro suave */
     .stApp {
         background-color: #DCEEE1;
         color: #2D3748;
         font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
     }
     
-    /* Header Principal: Fondo Rojo Pastel Suave (como tenías antes) */
+    /* Header Principal: Fondo Rojo Pastel Suave */
     .pastel-header {
         background: linear-gradient(135deg, #FFF5F5 0%, #FED7D7 100%);
         padding: 22px 30px;
@@ -145,31 +145,24 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- CABECERA EN ROJO PASTEL CON BOT-CONEJO Y SIN TEXTO A LA DERECHA ---
+# --- CABECERA EN ROJO PASTEL CON BOT-CONEJO ---
 st.markdown("""
 <div class="pastel-header">
     <div class="header-content">
         <div class="bunny-bot-avatar">
-            <!-- SVG Bot Conejo Redondo Robótico -->
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <!-- Oreja Izquierda -->
                 <path d="M8 9V3a1.5 1.5 0 0 1 3 0v6"></path>
-                <!-- Oreja Derecha -->
                 <path d="M13 9V3a1.5 1.5 0 0 1 3 0v6"></path>
-                <!-- Cabeza/Cuerpo Redondo Robótico -->
                 <circle cx="12" cy="14" r="6"></circle>
-                <!-- Ojos Robóticos -->
                 <circle cx="10" cy="13" r="0.75" fill="white"></circle>
                 <circle cx="14" cy="13" r="0.75" fill="white"></circle>
-                <!-- Boquita Saludando -->
                 <path d="M10.5 16c.8.5 2.2.5 3 0"></path>
-                <!-- Antenita Central -->
                 <line x1="12" y1="8" x2="12" y2="7"></line>
             </svg>
         </div>
         <div>
             <h1>¡Hola! Strike Analytics Pro 👋</h1>
-            <p>Generador de 9 Boletos Tácticos</p>
+            <p>Generador Dinámico de 9 Boletos Tácticos</p>
         </div>
     </div>
 </div>
@@ -212,7 +205,6 @@ def guardar_en_excel_master(df_boletos, num_jornada, fecha_str, partidos_info):
 
     start_row = ws.max_row + 2 if ws.max_row > 1 else 1
 
-    # Banner de la Jornada
     ws.merge_cells(start_row=start_row, start_column=1, end_row=start_row, end_column=9)
     cell_b = ws.cell(row=start_row, column=1)
     p_summary = f"P1: {partidos_info[0]['local']} vs {partidos_info[0]['visitante']} | P2: {partidos_info[1]['local']} vs {partidos_info[1]['visitante']} | P3: {partidos_info[2]['local']} vs {partidos_info[2]['visitante']}"
@@ -221,7 +213,6 @@ def guardar_en_excel_master(df_boletos, num_jornada, fecha_str, partidos_info):
     cell_b.font = font_banner
     cell_b.alignment = Alignment(horizontal="left", vertical="center")
 
-    # Encabezados
     headers = list(df_boletos.columns)
     header_row = start_row + 1
     for col_idx, h in enumerate(headers, start=1):
@@ -230,7 +221,6 @@ def guardar_en_excel_master(df_boletos, num_jornada, fecha_str, partidos_info):
         cell.font = font_header
         cell.alignment = Alignment(horizontal="center", vertical="center")
 
-    # Filas de Boletos
     data_start = header_row + 1
     for r_idx, row in enumerate(df_boletos.itertuples(index=False), start=data_start):
         row_fill = fill_even if r_idx % 2 == 0 else fill_odd
@@ -261,9 +251,9 @@ with tab_gen:
     st.markdown("##### 1. Configura tus Partidos y Cuotas")
     
     partidos_defecto = [
-        {"local": "Dinamo Zagreb", "visitante": "Viking", "c1": 1.90, "cx": 3.60, "c2": 3.80, "base": "X"},
-        {"local": "Levski Sofia", "visitante": "AEK Atenas", "c1": 3.40, "cx": 3.00, "c2": 2.55, "base": "2"},
-        {"local": "U. Católica", "visitante": "Estudiantes L.P.", "c1": 2.55, "cx": 3.05, "c2": 2.95, "base": "1"}
+        {"local": "Equipo A", "visitante": "Equipo B", "c1": 2.45, "cx": 3.20, "c2": 2.80},
+        {"local": "Equipo C", "visitante": "Equipo D", "c1": 3.40, "cx": 3.00, "c2": 2.55},
+        {"local": "Equipo E", "visitante": "Equipo F", "c1": 2.35, "cx": 3.10, "c2": 2.95}
     ]
 
     cols = st.columns(3)
@@ -279,12 +269,23 @@ with tab_gen:
             cx = st.number_input(f"Cuota X (Empate)", min_value=1.01, value=p["cx"], step=0.05, key=f"cx_{i}")
             c2 = st.number_input(f"Cuota 2 ({nom_vis})", min_value=1.01, value=p["c2"], step=0.05, key=f"c2_{i}")
             
-            base_sel = st.selectbox(f"Pronóstico Base P{i+1}", ["1", "X", "2"], index=["1", "X", "2"].index(p["base"]), key=f"base_{i}")
+            opciones_cuotas = {"1": c1, "X": cx, "2": c2}
+            validas = {k: v for k, v in opciones_cuotas.items() if v >= 2.30}
+            
+            if len(validas) > 0:
+                base_auto = max(validas, key=validas.get)
+                cuota_val = validas[base_auto]
+            else:
+                base_auto = max(opciones_cuotas, key=opciones_cuotas.get)
+                cuota_val = opciones_cuotas[base_auto]
+                st.caption("⚠️ Ninguna cuota supera 2.30")
+
+            st.info(f"🎯 *Base Automática:* Signo {base_auto} (Cuota: {cuota_val:.2f})")
 
             partidos_analizados.append({
                 "local": nom_loc, "visitante": nom_vis,
                 "c1": c1, "cx": cx, "c2": c2,
-                "base_sel": base_sel
+                "base_sel": base_auto
             })
 
     st.markdown("---")
