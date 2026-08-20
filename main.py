@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import io
+from datetime import datetime
 import openpyxl
 from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
@@ -216,7 +217,6 @@ with tab1:
         b_ganador = st.session_state["matriz_actual"][boleto_ganador_id - 1]
         st_unit = st.session_state.get("stake_unidad", stake_unidad)
 
-        # Cálculo dinámico directo
         d12_v = b_ganador.get("d12_val", round((b_ganador["c1"] * b_ganador["c2"]) * st_unit, 2))
         d13_v = b_ganador.get("d13_val", round((b_ganador["c1"] * b_ganador["c3"]) * st_unit, 2))
         d23_v = b_ganador.get("d23_val", round((b_ganador["c2"] * b_ganador["c3"]) * st_unit, 2))
@@ -276,8 +276,13 @@ with tab1:
             monto_cobrado_real = st.number_input("Monto Real Cobrado (€)", value=float(round(cobro_total_simulado, 2)))
 
         if st.button("📌 Guardar en Historial"):
+            p_act = st.session_state["partidos_actuales"]
+            resumen_partidos = f"{p_act[0]['vs']} | {p_act[1]['vs']} | {p_act[2]['vs']}"
+            
             st.session_state["historial_apuestas"].append({
+                "Fecha": datetime.now().strftime("%Y-%m-%d"),
                 "Jornada": nombre_jornada,
+                "Equipos / Partidos": resumen_partidos,
                 "Inversión (€)": st.session_state["inversion_actual"],
                 "Cobrado (€)": monto_cobrado_real,
                 "Beneficio (€)": round(monto_cobrado_real - st.session_state["inversion_actual"], 2),
@@ -295,20 +300,22 @@ with tab2:
         st.subheader("🛠️ Editar o Eliminar Jornadas Registradas")
         
         for idx_h, item in enumerate(st.session_state["historial_apuestas"]):
-            c_h1, c_h2, c_h3, c_h4, c_h5 = st.columns([2, 2, 2, 2, 1])
+            c_h1, c_h2, c_h3, c_h4, c_h5, c_h6 = st.columns([1.5, 2, 3, 2, 2, 1])
             
             with c_h1:
-                item["Jornada"] = st.text_input("Jornada", value=item["Jornada"], key=f"edit_j_{idx_h}")
+                item["Fecha"] = st.text_input("Fecha", value=item.get("Fecha", datetime.now().strftime("%Y-%m-%d")), key=f"edit_f_{idx_h}")
             with c_h2:
+                item["Jornada"] = st.text_input("Jornada", value=item["Jornada"], key=f"edit_j_{idx_h}")
+            with c_h3:
+                item["Equipos / Partidos"] = st.text_input("Equipos", value=item.get("Equipos / Partidos", "P1 | P2 | P3"), key=f"edit_eq_{idx_h}")
+            with c_h4:
                 item["Cobrado (€)"] = st.number_input("Cobrado (€)", value=float(item["Cobrado (€)"]), key=f"edit_c_{idx_h}")
                 item["Beneficio (€)"] = round(item["Cobrado (€)"] - item["Inversión (€)"], 2)
-            with c_h3:
+            with c_h5:
                 item["Estado"] = st.selectbox("Estado", ["Ganada (Victoria)", "Perdida", "Recuperación Parcial"], 
                                              index=["Ganada (Victoria)", "Perdida", "Recuperación Parcial"].index(item["Estado"]) if item["Estado"] in ["Ganada (Victoria)", "Perdida", "Recuperación Parcial"] else 0, 
                                              key=f"edit_e_{idx_h}")
-            with c_h4:
-                st.write(f"*Beneficio:* {item['Beneficio (€)']:.2f}€")
-            with c_h5:
+            with c_h6:
                 st.write("")
                 st.write("")
                 if st.button("🗑️", key=f"del_{idx_h}"):
@@ -356,9 +363,9 @@ with tab2:
                     "Cuota P2": b["c2"],
                     f"Partido 3 ({p_act[2]['vs']})": b["sel3"],
                     "Cuota P3": b["c3"],
-                    "Cobro Doble (P1xP2) (€)": d12_e,
-                    "Cobro Doble (P1xP3) (€)": d13_e,
-                    "Cobro Doble (P2xP3) (€)": d23_e,
+                    "Cobro Doble 1 (P1xP2) (€)": d12_e,
+                    "Cobro Doble 2 (P1xP3) (€)": d13_e,
+                    "Cobro Doble 3 (P2xP3) (€)": d23_e,
                     "Cobro Triple Trixie (€)": trip_e,
                     "TOTAL TRIXIE COMPLETO (€)": round(b["Cobro Trixie (€)"], 2)
                 })
@@ -370,30 +377,38 @@ with tab2:
         buffer.seek(0)
         workbook = openpyxl.load_workbook(buffer)
 
+        # ESTILOS MEJORADOS (ESTÉTICA MODERNA VERDE + FILAS CEBRA)
         header_fill = PatternFill(start_color="1B5E20", end_color="1B5E20", fill_type="solid")
         header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
-        thin_border = Border(left=Side(style='thin', color='D3D3D3'),
-                             right=Side(style='thin', color='D3D3D3'),
-                             top=Side(style='thin', color='D3D3D3'),
-                             bottom=Side(style='thin', color='D3D3D3'))
+        zebra_fill = PatternFill(start_color="F1F8E9", end_color="F1F8E9", fill_type="solid")
+        white_fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+        thin_border = Border(left=Side(style='thin', color='C8E6C9'),
+                             right=Side(style='thin', color='C8E6C9'),
+                             top=Side(style='thin', color='C8E6C9'),
+                             bottom=Side(style='thin', color='C8E6C9'))
 
         for sheet in workbook.worksheets:
+            # Encabezado
             for cell in sheet[1]:
                 cell.fill = header_fill
                 cell.font = header_font
-                cell.alignment = Alignment(horizontal="center", vertical="center")
+                cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
-            for row in sheet.iter_rows(min_row=2):
+            # Celdas y Filas Cebra
+            for row_idx, row in enumerate(sheet.iter_rows(min_row=2), start=2):
+                fill_color = zebra_fill if row_idx % 2 == 0 else white_fill
                 for cell in row:
+                    cell.fill = fill_color
                     cell.border = thin_border
                     cell.alignment = Alignment(horizontal="center", vertical="center")
                     if isinstance(cell.value, (int, float)):
                         cell.number_format = '#,##0.00 €'
 
+            # Ancho de Columnas
             for col in sheet.columns:
                 max_len = max(len(str(cell.value or '')) for cell in col)
                 col_letter = get_column_letter(col[0].column)
-                sheet.column_dimensions[col_letter].width = max(max_len + 4, 12)
+                sheet.column_dimensions[col_letter].width = max(max_len + 5, 14)
 
         output_excel = io.BytesIO()
         workbook.save(output_excel)
