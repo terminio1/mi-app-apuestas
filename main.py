@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 import io
+from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
 
 # Configuración de página con la estética de Strike Analytics Pro
 st.set_page_config(page_title="Strike Analytics Pro", page_icon="🐰", layout="wide")
@@ -43,16 +45,16 @@ with col_head2:
         """
         <div style="background-color: white; border-radius: 15px; padding: 15px; border: 1px solid #FFEBEB;">
             <h1 style="color: #A32A2A; margin: 0; font-size: 32px;">Strike Analytics Pro 👋</h1>
-            <p style="color: #A32A2A; margin: 5px 0 0 0;">Generador Dinámico, Simulador Escenario por Escenario y Exportador Excel</p>
+            <p style="color: #A32A2A; margin: 5px 0 0 0;">Generador Matricial, Efecto Dominó y Gestor de Historial</p>
         </div>
         """,
         unsafe_allow_html=True
     )
 
-tab1, tab2 = st.tabs(["🎯 Generador & Simulador", "📋 Historial & Exportación Excel"])
+tab1, tab2 = st.tabs(["🎯 Generador & Simulador Dominó", "📋 Historial & Modificador Excel"])
 
 with tab1:
-    st.header("1. Ingreso de Datos (3 Partidos / 6 Equipos y Cuotas)")
+    st.header("1. Ingreso de Datos (Partidos, Equipos y Cuotas)")
 
     col1, col2, col3 = st.columns(3)
     partidos = []
@@ -75,7 +77,6 @@ with tab1:
             cX = st.number_input(f"Cuota X (Empate)", min_value=1.01, value=3.20, step=0.05, key=f"cX_{idx}")
             c2 = st.number_input(f"Cuota 2 ({p_visitante})", min_value=1.01, value=3.50, step=0.05, key=f"c2_{idx}")
             
-            # Algoritmo de recomendación
             prob1, probX, prob2 = 1/c1, 1/cX, 1/c2
             total_prob = prob1 + probX + prob2
             p1_real, pX_real, p2_real = (prob1/total_prob)*100, (probX/total_prob)*100, (prob2/total_prob)*100
@@ -107,9 +108,7 @@ with tab1:
                 "p1_prob": p1_real, "pX_prob": pX_real, "p2_prob": p2_real
             })
 
-    # ---------------------------------------------------------
     # BOLETOS 8 Y 9
-    # ---------------------------------------------------------
     st.header("2. Boletos Libres (8 y 9)")
     auto_pilot = st.checkbox("🤖 Auto-Piloto IA para Boletos 8 y 9", value=True)
     
@@ -138,10 +137,10 @@ with tab1:
     stake_unidad = monto_por_boleto / 4.0
     inversion_total = monto_por_boleto * 9
 
-    st.success(f"💡 Inversión Total (9 Boletos): *{inversion_total:.2f}€* ({stake_unidad:.2f}€ por apuesta individual)")
+    st.success(f"💡 Inversión Total (9 Boletos): *{inversion_total:.2f}€* ({stake_unidad:.2f}€ por apuesta individual dentro de Trixie)")
 
     # GENERAR MATRIZ
-    if st.button("🚀 Calcular Matriz Completa y Simulador", use_container_width=True):
+    if st.button("🚀 Calcular Matriz Completa y Simulador Dominó", use_container_width=True):
         boletos_data = []
 
         def obtener_cuota(p_dict, sel_texto):
@@ -154,11 +153,13 @@ with tab1:
             c2 = obtener_cuota(partidos[1], sel2)
             c3 = obtener_cuota(partidos[2], sel3)
             
-            c_d12, c_d13, c_d23 = c1 * c2, c1 * c3, c2 * c3
-            c_triple = c1 * c2 * c3
+            d12 = c1 * c2
+            d13 = c1 * c3
+            d23 = c2 * c3
+            triple = c1 * c2 * c3
             
-            pago_dobles = (c_d12 + c_d13 + c_d23) * stake_unidad
-            pago_trixie = (c_d12 + c_d13 + c_d23 + c_triple) * stake_unidad
+            pago_dobles = (d12 + d13 + d23) * stake_unidad
+            pago_trixie = (d12 + d13 + d23 + triple) * stake_unidad
             
             boletos_data.append({
                 "ID": num,
@@ -167,10 +168,14 @@ with tab1:
                 f"{partidos[0]['vs']}": f"{sel1} ({c1:.2f})",
                 f"{partidos[1]['vs']}": f"{sel2} ({c2:.2f})",
                 f"{partidos[2]['vs']}": f"{sel3} ({c3:.2f})",
-                "Cobro 3 Dobles (€)": round(pago_dobles, 2),
-                "Cobro Trixie Completo (€)": round(pago_trixie, 2),
+                "Cobro Dobles (€)": round(pago_dobles, 2),
+                "Cobro Trixie (€)": round(pago_trixie, 2),
                 "c1": c1, "c2": c2, "c3": c3,
-                "sel1": sel1, "sel2": sel2, "sel3": sel3
+                "sel1": sel1, "sel2": sel2, "sel3": sel3,
+                "d12_val": d12 * stake_unidad,
+                "d13_val": d13 * stake_unidad,
+                "d23_val": d23 * stake_unidad,
+                "triple_val": triple * stake_unidad
             })
 
         op_b1, op_b2, op_b3 = partidos[0]["opcion_base"], partidos[1]["opcion_base"], partidos[2]["opcion_base"]
@@ -190,60 +195,76 @@ with tab1:
         st.session_state["inversion_actual"] = inversion_total
         st.session_state["partidos_actuales"] = partidos
 
-    # SI YA EXISTE UNA MATRIZ GENERADA
     if "matriz_actual" in st.session_state:
         df_matriz = pd.DataFrame(st.session_state["matriz_actual"])
         
         st.header("📋 Matriz de 9 Boletos Generada")
-        st.dataframe(df_matriz.drop(columns=["c1", "c2", "c3", "sel1", "sel2", "sel3", "ID"]), use_container_width=True)
+        cols_mostrar = ["Boleto", "Estrategia", f"{partidos[0]['vs']}", f"{partidos[1]['vs']}", f"{partidos[2]['vs']}", "Cobro Dobles (€)", "Cobro Trixie (€)"]
+        st.dataframe(df_matriz[cols_mostrar], use_container_width=True)
 
         # ---------------------------------------------------------
-        # SIMULADOR DE CUALQUIER BOLETO GANADOR
+        # SIMULADOR Y EFECTO DOMINÓ DESGLOSADO
         # ---------------------------------------------------------
         st.markdown("---")
-        st.header("🔮 Simulador de Cobros según qué Boleto gane")
-        st.markdown("Elige cuál boleto acierta los 3 partidos enteros para ver el *Cobro Total Real* sumando ese Trixie completo + las Dobles de rescate de los otros boletos:")
-
+        st.header("🔮 Simulador y Desglose del Efecto Dominó")
+        
         boleto_ganador_id = st.selectbox(
-            "Selecciona el Boleto Ganador a Simular:",
+            "Selecciona qué Boleto acertó los 3 partidos:",
             options=[b["ID"] for b in st.session_state["matriz_actual"]],
             format_func=lambda x: f"Boleto {x} ({st.session_state['matriz_actual'][x-1]['Estrategia']})"
         )
 
-        # Cálculo del escenario elegido
         b_ganador = st.session_state["matriz_actual"][boleto_ganador_id - 1]
-        c1_g, c2_g, c3_g = b_ganador["c1"], b_ganador["c2"], b_ganador["c3"]
         
-        # Cobro del boleto ganador en Trixie completo
-        cobro_trixie_ganador = (c1_g*c2_g + c1_g*c3_g + c2_g*c3_g + c1_g*c2_g*c3_g) * stake_unidad
+        st.subheader(f"📊 Desglose de Ganancias para Boleto {boleto_ganador_id}")
+        
+        c1_col, c2_col, c3_col, c4_col = st.columns(4)
+        c1_col.metric("Doble 1 (P1 x P2)", f"{b_ganador['d12_val']:.2f}€")
+        c2_col.metric("Doble 2 (P1 x P3)", f"{b_ganador['d13_val']:.2f}€")
+        c3_col.metric("Doble 3 (P2 x P3)", f"{b_ganador['d23_val']:.2f}€")
+        c4_col.metric("Triple Trixie (P1 x P2 x P3)", f"{b_ganador['triple_val']:.2f}€")
 
-        # Suma de dobles en los demás boletos que compartan 2 aciertos
+        # Rescate en los otros boletos
         suma_dobles_otros = 0.0
+        detalles_rescate = []
         for b in st.session_state["matriz_actual"]:
             if b["ID"] != boleto_ganador_id:
                 m1 = (b["sel1"] == b_ganador["sel1"])
                 m2 = (b["sel2"] == b_ganador["sel2"])
                 m3 = (b["sel3"] == b_ganador["sel3"])
                 
-                if m1 and m2: suma_dobles_otros += (b["c1"] * b["c2"]) * stake_unidad
-                if m1 and m3: suma_dobles_otros += (b["c1"] * b["c3"]) * stake_unidad
-                if m2 and m3: suma_dobles_otros += (b["c2"] * b["c3"]) * stake_unidad
+                sum_b = 0
+                if m1 and m2: sum_b += (b["c1"] * b["c2"]) * stake_unidad
+                if m1 and m3: sum_b += (b["c1"] * b["c3"]) * stake_unidad
+                if m2 and m3: sum_b += (b["c2"] * b["c3"]) * stake_unidad
+                
+                if sum_b > 0:
+                    suma_dobles_otros += sum_b
+                    detalles_rescate.append(f"• *Boleto {b['ID']}*: aporta {sum_b:.2f}€ por compartir 2 aciertos.")
 
+        cobro_trixie_ganador = b_ganador["Cobro Trixie (€)"]
         cobro_total_simulado = cobro_trixie_ganador + suma_dobles_otros
         neto_simulado = cobro_total_simulado - st.session_state["inversion_actual"]
 
-        col_s1, col_s2, col_s3 = st.columns(3)
-        col_s1.metric(f"Cobro Trixie (Boleto {boleto_ganador_id})", f"{cobro_trixie_ganador:.2f}€")
-        col_s2.metric("Suma Dobles de Rescate (Otros Boletos)", f"{suma_dobles_otros:.2f}€")
-        col_s3.metric("🔥 TOTAL RECAUDADO", f"{cobro_total_simulado:.2f}€", delta=f"{neto_simulado:+.2f}€ Neto")
+        st.markdown("*Efecto Dominó en Coberturas:*")
+        if detalles_rescate:
+            for d in detalles_rescate:
+                st.markdown(d)
+        else:
+            st.write("Ningún otro boleto comparte 2 aciertos exactos con esta combinación.")
 
-        # BOTÓN PARA GUARDAR EN EL HISTORIAL
+        res_c1, res_c2, res_c3 = st.columns(3)
+        res_c1.metric("Cobro Trixie Ganador", f"{cobro_trixie_ganador:.2f}€")
+        res_c2.metric("Rescate Dobles (Otros Boletos)", f"{suma_dobles_otros:.2f}€")
+        res_c3.metric("🔥 GRAN TOTAL A COBRAR", f"{cobro_total_simulado:.2f}€", delta=f"{neto_simulado:+.2f}€ Neto")
+
+        # GUARDAR EN HISTORIAL
         st.markdown("---")
         st.subheader("💾 Guardar esta Jornada en tu Historial")
         col_g1, col_g2, col_g3 = st.columns(3)
         
         with col_g1:
-            nombre_jornada = st.text_input("Nombre / Fecha de la Jornada", value="Jornada 1")
+            nombre_jornada = st.text_input("Nombre / Fecha de la Jornada", value=f"Jornada {len(st.session_state['historial_apuestas']) + 1}")
         with col_g2:
             resultado_final = st.selectbox("Resultado de la Apuesta", ["Ganada (Victoria)", "Perdida", "Recuperación Parcial"])
         with col_g3:
@@ -255,23 +276,47 @@ with tab1:
                 "Inversión (€)": st.session_state["inversion_actual"],
                 "Cobrado (€)": monto_cobrado_real,
                 "Beneficio (€)": round(monto_cobrado_real - st.session_state["inversion_actual"], 2),
-                "Estado": resultado_final,
-                "Detalles": st.session_state["matriz_actual"]
+                "Estado": resultado_final
             })
-            st.success("¡Jornada guardada correctamente en el historial!")
+            st.success("¡Jornada guardada correctamente!")
 
 # ---------------------------------------------------------
-# PESTAÑA 2: HISTORIAL Y EXPORTACIÓN A EXCEL
+# PESTAÑA 2: HISTORIAL, MODIFICADOR Y EXPORTACIÓN EXCEL
 # ---------------------------------------------------------
 with tab2:
-    st.header("📋 Historial Unificado y Registro de Apuestas")
+    st.header("📋 Historial Unificado, Modificador y Exportación")
 
     if len(st.session_state["historial_apuestas"]) == 0:
-        st.info("Aún no has guardado ninguna jornada. Genera una matriz en la Pestaña 1 y haz clic en 'Guardar en Historial'.")
+        st.info("No hay jornadas registradas. Guarda una desde la Pestaña 1.")
     else:
-        df_historial = pd.DataFrame(st.session_state["historial_apuestas"]).drop(columns=["Detalles"])
+        st.subheader("🛠️ Editar o Eliminar Jornadas Registradas")
+        
+        # Gestor de filas
+        for idx_h, item in enumerate(st.session_state["historial_apuestas"]):
+            c_h1, c_h2, c_h3, c_h4, c_h5 = st.columns([2, 2, 2, 2, 1])
+            
+            with c_h1:
+                item["Jornada"] = st.text_input("Jornada", value=item["Jornada"], key=f"edit_j_{idx_h}")
+            with c_h2:
+                item["Cobrado (€)"] = st.number_input("Cobrado (€)", value=float(item["Cobrado (€)"]), key=f"edit_c_{idx_h}")
+                item["Beneficio (€)"] = round(item["Cobrado (€)"] - item["Inversión (€)"], 2)
+            with c_h3:
+                item["Estado"] = st.selectbox("Estado", ["Ganada (Victoria)", "Perdida", "Recuperación Parcial"], 
+                                             index=["Ganada (Victoria)", "Perdida", "Recuperación Parcial"].index(item["Estado"]) if item["Estado"] in ["Ganada (Victoria)", "Perdida", "Recuperación Parcial"] else 0, 
+                                             key=f"edit_e_{idx_h}")
+            with c_h4:
+                st.write(f"*Beneficio:* {item['Beneficio (€)']:.2f}€")
+            with c_h5:
+                st.write("")
+                st.write("")
+                if st.button("🗑️", key=f"del_{idx_h}"):
+                    st.session_state["historial_apuestas"].pop(idx_h)
+                    st.rerun()
 
-        # Aplicar formato visual compatible con versiones recientes de Pandas
+        st.markdown("---")
+        st.subheader("📊 Vista Previa del Historial Global")
+        df_historial = pd.DataFrame(st.session_state["historial_apuestas"])
+        
         def colorear_estado(val):
             if "Victoria" in str(val) or "Ganada" in str(val):
                 return 'background-color: #C8E6C9; color: #2E7D32; font-weight: bold;'
@@ -282,19 +327,80 @@ with tab2:
 
         st.dataframe(df_historial.style.map(colorear_estado, subset=["Estado"]), use_container_width=True)
 
-        st.subheader("📥 Exportar Matriz Actual o Historial a Excel")
+        st.markdown("---")
+        st.subheader("📥 Exportar a Excel Profesional (con Colores, Formatos y Desglose)")
 
+        # GENERACIÓN DE EXCEL CON ESTILOS AVANZADOS OPENPYXL
         buffer = io.BytesIO()
-        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-            df_historial.to_excel(writer, sheet_name='Historial Global', index=False)
-            if "matriz_actual" in st.session_state:
-                df_mat = pd.DataFrame(st.session_state["matriz_actual"]).drop(columns=["c1", "c2", "c3", "sel1", "sel2", "sel3"])
-                df_mat.to_excel(writer, sheet_name='Matriz_Detallada_Boletos', index=False)
+        wb = pd.ExcelWriter(buffer, engine='openpyxl')
+
+        # Hoja 1: Historial
+        df_historial.to_excel(wb, sheet_name='Historial Global', index=False)
+
+        # Hoja 2: Matriz Detallada
+        if "matriz_actual" in st.session_state:
+            p_act = st.session_state["partidos_actuales"]
+            detalles_excel = []
+            for b in st.session_state["matriz_actual"]:
+                detalles_excel.append({
+                    "Boleto": b["Boleto"],
+                    "Estrategia": b["Estrategia"],
+                    f"Partido 1 ({p_act[0]['vs']})": b["sel1"],
+                    "Cuota P1": b["c1"],
+                    f"Partido 2 ({p_act[1]['vs']})": b["sel2"],
+                    "Cuota P2": b["c2"],
+                    f"Partido 3 ({p_act[2]['vs']})": b["sel3"],
+                    "Cuota P3": b["c3"],
+                    "Cobro Doble (P1xP2) (€)": round(b["d12_val"], 2),
+                    "Cobro Doble (P1xP3) (€)": round(b["d13_val"], 2),
+                    "Cobro Doble (P2xP3) (€)": round(b["d23_val"], 2),
+                    "Cobro Triple Trixie (€)": round(b["triple_val"], 2),
+                    "TOTAL TRIXIE COMPLETO (€)": round(b["Cobro Trixie (€)"], 2)
+                })
+            df_mat_excel = pd.DataFrame(detalles_excel)
+            df_mat_excel.to_excel(wb, sheet_name='Matriz_Detallada_Boletos', index=False)
+
+        wb.close()
+
+        # APLICAR ESTILOS VISUALES AL LIBRO DE EXCEL
+        import openpyxl
+        buffer.seek(0)
+        workbook = openpyxl.load_workbook(buffer)
+
+        header_fill = PatternFill(start_color="1B5E20", end_color="1B5E20", fill_type="solid")
+        header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+        thin_border = Border(left=Side(style='thin', color='D3D3D3'),
+                             right=Side(style='thin', color='D3D3D3'),
+                             top=Side(style='thin', color='D3D3D3'),
+                             bottom=Side(style='thin', color='D3D3D3'))
+
+        for sheet in workbook.worksheets:
+            # Estilo de encabezados
+            for cell in sheet[1]:
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+
+            # Formato de celdas, bordes y ancho automático de columnas
+            for row in sheet.iter_rows(min_row=2):
+                for cell in row:
+                    cell.border = thin_border
+                    cell.alignment = Alignment(horizontal="center", vertical="center")
+                    if isinstance(cell.value, (int, float)):
+                        cell.number_format = '#,##0.00 €'
+
+            for col in sheet.columns:
+                max_len = max(len(str(cell.value or '')) for cell in col)
+                col_letter = get_column_letter(col[0].column)
+                sheet.column_dimensions[col_letter].width = max(max_len + 4, 12)
+
+        output_excel = io.BytesIO()
+        workbook.save(output_excel)
 
         st.download_button(
-            label="📊 Descargar Excel Completo con Formato",
-            data=buffer.getvalue(),
-            file_name="Strike_Analytics_Historial_Apuestas.xlsx",
+            label="📊 Descargar Excel Profesional con Formato y Colores",
+            data=output_excel.getvalue(),
+            file_name="Strike_Analytics_Matriz_y_Historial.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True
         )
