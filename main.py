@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import io
+import os
 from datetime import datetime
 import openpyxl
 from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
@@ -23,9 +24,26 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Inicializar Historial
+# ARCHIVO DE PERSISTENCIA
+ARCHIVO_HISTORIAL = "historial_guardado.csv"
+
+# Funciones para Cargar y Guardar de Forma Permanente
+def cargar_historial():
+    if os.path.exists(ARCHIVO_HISTORIAL):
+        try:
+            df = pd.read_csv(ARCHIVO_HISTORIAL)
+            return df.to_dict('records')
+        except Exception:
+            return []
+    return []
+
+def guardar_historial_disco(historial):
+    df = pd.DataFrame(historial)
+    df.to_csv(ARCHIVO_HISTORIAL, index=False)
+
+# Cargar historial permanente al iniciar
 if "historial_apuestas" not in st.session_state:
-    st.session_state["historial_apuestas"] = []
+    st.session_state["historial_apuestas"] = cargar_historial()
 
 # ENCABEZADO
 col_head1, col_head2 = st.columns([1, 4])
@@ -77,23 +95,18 @@ with tab1:
             cX = st.number_input(f"Cuota X (Empate)", min_value=1.01, value=3.20, step=0.05, key=f"cX_{idx}")
             c2 = st.number_input(f"Cuota 2 ({p_visitante})", min_value=1.01, value=3.50, step=0.05, key=f"c2_{idx}")
             
-            # Selector Manual de la Opción Base
-            opciones_partido = [f"1 ({p_local})", "X (Empate)", f"2 ({p_visitante})"]
+            oppciones_partido = [f"1 ({p_local})", "X (Empate)", f"2 ({p_visitante})"]
             
             base_elegida = st.selectbox(
                 f"🎯 Tu Opción Base P{idx}:",
-                options=opciones_partido,
+                options=oppciones_partido,
                 index=0,
                 key=f"base_man_{idx}"
             )
 
-            # Cuota de la base seleccionada
-            if "1" in base_elegida:
-                cuota_base = c1
-            elif "2" in base_elegida:
-                cuota_base = c2
-            else:
-                cuota_base = cX
+            if "1" in base_elegida: cuota_base = c1
+            elif "2" in base_elegida: cuota_base = c2
+            else: cuota_base = cX
 
             st.markdown(
                 f"""
@@ -111,7 +124,6 @@ with tab1:
                 "opcion_base": base_elegida, "cuota_base": cuota_base
             })
 
-    # BOLETOS 8 Y 9
     st.header("2. Boletos Libres (8 y 9)")
     auto_pilot = st.checkbox("🤖 Auto-Piloto IA para Boletos 8 y 9", value=True)
     
@@ -120,15 +132,11 @@ with tab1:
     opciones_p3 = [f"1 ({partidos[2]['local']})", "X (Empate)", f"2 ({partidos[2]['visitante']})"]
 
     def op_sorpresa(p):
-        if "1" in p["opcion_base"]:
-            return f"2 ({p['visitante']})"
-        elif "2" in p["opcion_base"]:
-            return f"1 ({p['local']})"
-        else:
-            return f"1 ({p['local']})"
+        if "1" in p["opcion_base"]: return f"2 ({p['visitante']})"
+        elif "2" in p["opcion_base"]: return f"1 ({p['local']})"
+        else: return f"1 ({p['local']})"
 
     if auto_pilot:
-        # Si la base es Empate, la cobertura ajusta a 1
         b8_p1 = "X (Empate)" if "X" not in partidos[0]["opcion_base"] else f"1 ({partidos[0]['local']})"
         b8_p2 = "X (Empate)" if "X" not in partidos[1]["opcion_base"] else f"1 ({partidos[1]['local']})"
         b8_p3 = partidos[2]["opcion_base"]
@@ -147,7 +155,6 @@ with tab1:
             b9_p2 = st.selectbox("P2 (Boleto 9)", opciones_p2, index=2, key="b9_p2")
             b9_p3 = st.selectbox("P3 (Boleto 9)", opciones_p3, index=2, key="b9_p3")
 
-    # STAKE
     st.header("3. Configuración del Stake")
     monto_por_boleto = st.number_input("Monto por Boleto (€)", min_value=1.0, value=10.0, step=1.0)
     stake_unidad = monto_por_boleto / 4.0
@@ -155,7 +162,6 @@ with tab1:
 
     st.success(f"💡 Inversión Total (9 Boletos): *{inversion_total:.2f}€* ({stake_unidad:.2f}€ por apuesta individual dentro de Trixie)")
 
-    # CÁLCULO Y GENERACIÓN EN TIEMPO REAL
     boletos_data = []
 
     def obtener_cuota(p_dict, sel_texto):
@@ -164,11 +170,8 @@ with tab1:
         else: return p_dict["cX"]
 
     def obtener_empate_o_cobertura(p_dict):
-        # Si la base elegida es X, la cobertura busca el 1
-        if "X" in p_dict["opcion_base"]:
-            return f"1 ({p_dict['local']})"
-        else:
-            return "X (Empate)"
+        if "X" in p_dict["opcion_base"]: return f"1 ({p_dict['local']})"
+        else: return "X (Empate)"
 
     def agregar_boleto(num, tipo, sel1, sel2, sel3):
         c1 = obtener_cuota(partidos[0], sel1)
@@ -202,7 +205,6 @@ with tab1:
 
     op_b1, op_b2, op_b3 = partidos[0]["opcion_base"], partidos[1]["opcion_base"], partidos[2]["opcion_base"]
 
-    # Generación dinámica basada en la selección manual del usuario
     agregar_boleto(1, "🔥 BASE PRINCIPAL", op_b1, op_b2, op_b3)
     agregar_boleto(2, "🛡️ Cobertura Secundario P1", obtener_empate_o_cobertura(partidos[0]), op_b2, op_b3)
     agregar_boleto(3, "🛡️ Cobertura Secundario P2", op_b1, obtener_empate_o_cobertura(partidos[1]), op_b3)
@@ -226,7 +228,6 @@ with tab1:
     df_vista = df_matriz.drop(columns=[c for c in cols_ocultar if c in df_matriz.columns])
     st.dataframe(df_vista, use_container_width=True)
 
-    # SIMULADOR EN TIEMPO REAL
     st.markdown("---")
     st.header("🔮 Simulador y Desglose del Efecto Dominó")
     
@@ -284,9 +285,8 @@ with tab1:
     res_c2.metric("Rescate Dobles (Otros Boletos)", f"{suma_dobles_otros:.2f}€")
     res_c3.metric("🔥 GRAN TOTAL A COBRAR", f"{cobro_total_simulado:.2f}€", delta=f"{neto_simulado:+.2f}€ Neto")
 
-    # GUARDAR EN HISTORIAL
     st.markdown("---")
-    st.subheader("💾 Guardar esta Jornada en tu Historial")
+    st.subheader("💾 Guardar esta Jornada en tu Historial Permanente")
     col_g1, col_g2, col_g3 = st.columns(3)
     
     with col_g1:
@@ -299,7 +299,7 @@ with tab1:
     if st.button("📌 Guardar en Historial"):
         resumen_partidos = f"{partidos[0]['vs']} | {partidos[1]['vs']} | {partidos[2]['vs']}"
         
-        st.session_state["historial_apuestas"].append({
+        nueva_jornada = {
             "Fecha": datetime.now().strftime("%Y-%m-%d"),
             "Jornada": nombre_jornada,
             "Equipos / Partidos": resumen_partidos,
@@ -307,8 +307,11 @@ with tab1:
             "Cobrado (€)": monto_cobrado_real,
             "Beneficio (€)": round(monto_cobrado_real - inversion_total, 2),
             "Estado": resultado_final
-        })
-        st.success("¡Jornada guardada correctamente!")
+        }
+        
+        st.session_state["historial_apuestas"].append(nueva_jornada)
+        guardar_historial_disco(st.session_state["historial_apuestas"])
+        st.success("¡Jornada guardada permanentemente en el servidor!")
 
 # PESTAÑA 2: HISTORIAL Y EXPORTACIÓN
 with tab2:
@@ -319,28 +322,53 @@ with tab2:
     else:
         st.subheader("🛠️ Editar o Eliminar Jornadas Registradas")
         
+        modificado = False
+        indice_eliminar = None
+        
         for idx_h, item in enumerate(st.session_state["historial_apuestas"]):
             c_h1, c_h2, c_h3, c_h4, c_h5, c_h6 = st.columns([1.5, 2, 3, 2, 2, 1])
             
             with c_h1:
-                item["Fecha"] = st.text_input("Fecha", value=item.get("Fecha", datetime.now().strftime("%Y-%m-%d")), key=f"edit_f_{idx_h}")
+                f_val = st.text_input("Fecha", value=item.get("Fecha", datetime.now().strftime("%Y-%m-%d")), key=f"edit_f_{idx_h}")
+                if f_val != item.get("Fecha"):
+                    item["Fecha"] = f_val
+                    modificado = True
             with c_h2:
-                item["Jornada"] = st.text_input("Jornada", value=item["Jornada"], key=f"edit_j_{idx_h}")
+                j_val = st.text_input("Jornada", value=item["Jornada"], key=f"edit_j_{idx_h}")
+                if j_val != item["Jornada"]:
+                    item["Jornada"] = j_val
+                    modificado = True
             with c_h3:
-                item["Equipos / Partidos"] = st.text_input("Equipos", value=item.get("Equipos / Partidos", "P1 | P2 | P3"), key=f"edit_eq_{idx_h}")
+                eq_val = st.text_input("Equipos", value=item.get("Equipos / Partidos", "P1 | P2 | P3"), key=f"edit_eq_{idx_h}")
+                if eq_val != item.get("Equipos / Partidos"):
+                    item["Equipos / Partidos"] = eq_val
+                    modificado = True
             with c_h4:
-                item["Cobrado (€)"] = st.number_input("Cobrado (€)", value=float(item["Cobrado (€)"]), key=f"edit_c_{idx_h}")
-                item["Beneficio (€)"] = round(item["Cobrado (€)"] - item["Inversión (€)"], 2)
+                c_val = st.number_input("Cobrado (€)", value=float(item["Cobrado (€)"]), key=f"edit_c_{idx_h}")
+                if c_val != item["Cobrado (€)"]:
+                    item["Cobrado (€)"] = c_val
+                    item["Beneficio (€)"] = round(c_val - item["Inversión (€)"], 2)
+                    modificado = True
             with c_h5:
-                item["Estado"] = st.selectbox("Estado", ["Ganada (Victoria)", "Perdida", "Recuperación Parcial"], 
+                e_val = st.selectbox("Estado", ["Ganada (Victoria)", "Perdida", "Recuperación Parcial"], 
                                              index=["Ganada (Victoria)", "Perdida", "Recuperación Parcial"].index(item["Estado"]) if item["Estado"] in ["Ganada (Victoria)", "Perdida", "Recuperación Parcial"] else 0, 
                                              key=f"edit_e_{idx_h}")
+                if e_val != item["Estado"]:
+                    item["Estado"] = e_val
+                    modificado = True
             with c_h6:
                 st.write("")
                 st.write("")
                 if st.button("🗑️", key=f"del_{idx_h}"):
-                    st.session_state["historial_apuestas"].pop(idx_h)
-                    st.rerun()
+                    indice_eliminar = idx_h
+
+        if indice_eliminar is not None:
+            st.session_state["historial_apuestas"].pop(indice_eliminar)
+            guardar_historial_disco(st.session_state["historial_apuestas"])
+            st.rerun()
+
+        if modificado:
+            guardar_historial_disco(st.session_state["historial_apuestas"])
 
         st.markdown("---")
         st.subheader("📊 Vista Previa del Historial Global")
