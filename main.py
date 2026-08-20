@@ -171,10 +171,10 @@ with tab1:
                 "Cobro Trixie (€)": round(pago_trixie, 2),
                 "c1": c1, "c2": c2, "c3": c3,
                 "sel1": sel1, "sel2": sel2, "sel3": sel3,
-                "d12_val": d12 * stake_unidad,
-                "d13_val": d13 * stake_unidad,
-                "d23_val": d23 * stake_unidad,
-                "triple_val": triple * stake_unidad
+                "d12_val": round(d12 * stake_unidad, 2),
+                "d13_val": round(d13 * stake_unidad, 2),
+                "d23_val": round(d23 * stake_unidad, 2),
+                "triple_val": round(triple * stake_unidad, 2)
             })
 
         op_b1, op_b2, op_b3 = partidos[0]["opcion_base"], partidos[1]["opcion_base"], partidos[2]["opcion_base"]
@@ -193,6 +193,7 @@ with tab1:
         st.session_state["matriz_actual"] = boletos_data
         st.session_state["inversion_actual"] = inversion_total
         st.session_state["partidos_actuales"] = partidos
+        st.session_state["stake_unidad"] = stake_unidad
 
     if "matriz_actual" in st.session_state:
         df_matriz = pd.DataFrame(st.session_state["matriz_actual"])
@@ -213,14 +214,21 @@ with tab1:
         )
 
         b_ganador = st.session_state["matriz_actual"][boleto_ganador_id - 1]
+        st_unit = st.session_state.get("stake_unidad", stake_unidad)
+
+        # Cálculo dinámico directo
+        d12_v = b_ganador.get("d12_val", round((b_ganador["c1"] * b_ganador["c2"]) * st_unit, 2))
+        d13_v = b_ganador.get("d13_val", round((b_ganador["c1"] * b_ganador["c3"]) * st_unit, 2))
+        d23_v = b_ganador.get("d23_val", round((b_ganador["c2"] * b_ganador["c3"]) * st_unit, 2))
+        trip_v = b_ganador.get("triple_val", round((b_ganador["c1"] * b_ganador["c2"] * b_ganador["c3"]) * st_unit, 2))
         
         st.subheader(f"📊 Desglose de Ganancias para Boleto {boleto_ganador_id}")
         
         c1_col, c2_col, c3_col, c4_col = st.columns(4)
-        c1_col.metric("Doble 1 (P1 x P2)", f"{b_ganador['d12_val']:.2f}€")
-        c2_col.metric("Doble 2 (P1 x P3)", f"{b_ganador['d13_val']:.2f}€")
-        c3_col.metric("Doble 3 (P2 x P3)", f"{b_ganador['d23_val']:.2f}€")
-        c4_col.metric("Triple Trixie (P1 x P2 x P3)", f"{b_ganador['triple_val']:.2f}€")
+        c1_col.metric("Doble 1 (P1 x P2)", f"{d12_v:.2f}€")
+        c2_col.metric("Doble 2 (P1 x P3)", f"{d13_v:.2f}€")
+        c3_col.metric("Doble 3 (P2 x P3)", f"{d23_v:.2f}€")
+        c4_col.metric("Triple Trixie (P1 x P2 x P3)", f"{trip_v:.2f}€")
 
         suma_dobles_otros = 0.0
         detalles_rescate = []
@@ -231,9 +239,9 @@ with tab1:
                 m3 = (b["sel3"] == b_ganador["sel3"])
                 
                 sum_b = 0
-                if m1 and m2: sum_b += (b["c1"] * b["c2"]) * stake_unidad
-                if m1 and m3: sum_b += (b["c1"] * b["c3"]) * stake_unidad
-                if m2 and m3: sum_b += (b["c2"] * b["c3"]) * stake_unidad
+                if m1 and m2: sum_b += (b["c1"] * b["c2"]) * st_unit
+                if m1 and m3: sum_b += (b["c1"] * b["c3"]) * st_unit
+                if m2 and m3: sum_b += (b["c2"] * b["c3"]) * st_unit
                 
                 if sum_b > 0:
                     suma_dobles_otros += sum_b
@@ -331,8 +339,14 @@ with tab2:
 
         if "matriz_actual" in st.session_state:
             p_act = st.session_state["partidos_actuales"]
+            st_u = st.session_state.get("stake_unidad", 2.5)
             detalles_excel = []
             for b in st.session_state["matriz_actual"]:
+                d12_e = b.get("d12_val", round((b["c1"] * b["c2"]) * st_u, 2))
+                d13_e = b.get("d13_val", round((b["c1"] * b["c3"]) * st_u, 2))
+                d23_e = b.get("d23_val", round((b["c2"] * b["c3"]) * st_u, 2))
+                trip_e = b.get("triple_val", round((b["c1"] * b["c2"] * b["c3"]) * st_u, 2))
+                
                 detalles_excel.append({
                     "Boleto": b["Boleto"],
                     "Estrategia": b["Estrategia"],
@@ -342,10 +356,10 @@ with tab2:
                     "Cuota P2": b["c2"],
                     f"Partido 3 ({p_act[2]['vs']})": b["sel3"],
                     "Cuota P3": b["c3"],
-                    "Cobro Doble (P1xP2) (€)": round(b["d12_val"], 2),
-                    "Cobro Doble (P1xP3) (€)": round(b["d13_val"], 2),
-                    "Cobro Doble (P2xP3) (€)": round(b["d23_val"], 2),
-                    "Cobro Triple Trixie (€)": round(b["triple_val"], 2),
+                    "Cobro Doble (P1xP2) (€)": d12_e,
+                    "Cobro Doble (P1xP3) (€)": d13_e,
+                    "Cobro Doble (P2xP3) (€)": d23_e,
+                    "Cobro Triple Trixie (€)": trip_e,
                     "TOTAL TRIXIE COMPLETO (€)": round(b["Cobro Trixie (€)"], 2)
                 })
             df_mat_excel = pd.DataFrame(detalles_excel)
