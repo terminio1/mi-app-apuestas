@@ -1,10 +1,11 @@
 import streamlit as st
 import pandas as pd
 import io
+import openpyxl
 from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-# Configuración de página con la estética de Strike Analytics Pro
+# Configuración de página
 st.set_page_config(page_title="Strike Analytics Pro", page_icon="🐰", layout="wide")
 
 st.markdown("""
@@ -21,13 +22,11 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Inicializar Historial en la sesión si no existe
+# Inicializar Historial
 if "historial_apuestas" not in st.session_state:
     st.session_state["historial_apuestas"] = []
 
-# ---------------------------------------------------------
-# ENCABEZADO VISUAL
-# ---------------------------------------------------------
+# ENCABEZADO
 col_head1, col_head2 = st.columns([1, 4])
 
 with col_head1:
@@ -165,9 +164,9 @@ with tab1:
                 "ID": num,
                 "Boleto": f"Boleto {num}",
                 "Estrategia": tipo,
-                f"{partidos[0]['vs']}": f"{sel1} ({c1:.2f})",
-                f"{partidos[1]['vs']}": f"{sel2} ({c2:.2f})",
-                f"{partidos[2]['vs']}": f"{sel3} ({c3:.2f})",
+                f"P1: {partidos[0]['vs']}": f"{sel1} ({c1:.2f})",
+                f"P2: {partidos[1]['vs']}": f"{sel2} ({c2:.2f})",
+                f"P3: {partidos[2]['vs']}": f"{sel3} ({c3:.2f})",
                 "Cobro Dobles (€)": round(pago_dobles, 2),
                 "Cobro Trixie (€)": round(pago_trixie, 2),
                 "c1": c1, "c2": c2, "c3": c3,
@@ -199,12 +198,11 @@ with tab1:
         df_matriz = pd.DataFrame(st.session_state["matriz_actual"])
         
         st.header("📋 Matriz de 9 Boletos Generada")
-        cols_mostrar = ["Boleto", "Estrategia", f"{partidos[0]['vs']}", f"{partidos[1]['vs']}", f"{partidos[2]['vs']}", "Cobro Dobles (€)", "Cobro Trixie (€)"]
-        st.dataframe(df_matriz[cols_mostrar], use_container_width=True)
+        cols_ocultar = ["c1", "c2", "c3", "sel1", "sel2", "sel3", "d12_val", "d13_val", "d23_val", "triple_val", "ID"]
+        df_vista = df_matriz.drop(columns=[c for c in cols_ocultar if c in df_matriz.columns])
+        st.dataframe(df_vista, use_container_width=True)
 
-        # ---------------------------------------------------------
-        # SIMULADOR Y EFECTO DOMINÓ DESGLOSADO
-        # ---------------------------------------------------------
+        # SIMULADOR Y EFECTO DOMINÓ
         st.markdown("---")
         st.header("🔮 Simulador y Desglose del Efecto Dominó")
         
@@ -224,7 +222,6 @@ with tab1:
         c3_col.metric("Doble 3 (P2 x P3)", f"{b_ganador['d23_val']:.2f}€")
         c4_col.metric("Triple Trixie (P1 x P2 x P3)", f"{b_ganador['triple_val']:.2f}€")
 
-        # Rescate en los otros boletos
         suma_dobles_otros = 0.0
         detalles_rescate = []
         for b in st.session_state["matriz_actual"]:
@@ -280,9 +277,7 @@ with tab1:
             })
             st.success("¡Jornada guardada correctamente!")
 
-# ---------------------------------------------------------
-# PESTAÑA 2: HISTORIAL, MODIFICADOR Y EXPORTACIÓN EXCEL
-# ---------------------------------------------------------
+# PESTAÑA 2: HISTORIAL Y EXPORTACIÓN
 with tab2:
     st.header("📋 Historial Unificado, Modificador y Exportación")
 
@@ -291,7 +286,6 @@ with tab2:
     else:
         st.subheader("🛠️ Editar o Eliminar Jornadas Registradas")
         
-        # Gestor de filas
         for idx_h, item in enumerate(st.session_state["historial_apuestas"]):
             c_h1, c_h2, c_h3, c_h4, c_h5 = st.columns([2, 2, 2, 2, 1])
             
@@ -328,16 +322,13 @@ with tab2:
         st.dataframe(df_historial.style.map(colorear_estado, subset=["Estado"]), use_container_width=True)
 
         st.markdown("---")
-        st.subheader("📥 Exportar a Excel Profesional (con Colores, Formatos y Desglose)")
+        st.subheader("📥 Exportar a Excel Profesional")
 
-        # GENERACIÓN DE EXCEL CON ESTILOS AVANZADOS OPENPYXL
         buffer = io.BytesIO()
         wb = pd.ExcelWriter(buffer, engine='openpyxl')
 
-        # Hoja 1: Historial
         df_historial.to_excel(wb, sheet_name='Historial Global', index=False)
 
-        # Hoja 2: Matriz Detallada
         if "matriz_actual" in st.session_state:
             p_act = st.session_state["partidos_actuales"]
             detalles_excel = []
@@ -362,8 +353,6 @@ with tab2:
 
         wb.close()
 
-        # APLICAR ESTILOS VISUALES AL LIBRO DE EXCEL
-        import openpyxl
         buffer.seek(0)
         workbook = openpyxl.load_workbook(buffer)
 
@@ -375,13 +364,11 @@ with tab2:
                              bottom=Side(style='thin', color='D3D3D3'))
 
         for sheet in workbook.worksheets:
-            # Estilo de encabezados
             for cell in sheet[1]:
                 cell.fill = header_fill
                 cell.font = header_font
                 cell.alignment = Alignment(horizontal="center", vertical="center")
 
-            # Formato de celdas, bordes y ancho automático de columnas
             for row in sheet.iter_rows(min_row=2):
                 for cell in row:
                     cell.border = thin_border
