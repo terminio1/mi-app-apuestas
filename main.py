@@ -54,7 +54,7 @@ with col_head2:
 tab1, tab2 = st.tabs(["🎯 Generador & Simulador Dominó", "📋 Historial & Modificador Excel"])
 
 with tab1:
-    st.header("1. Ingreso de Datos (Partidos, Equipos y Cuotas)")
+    st.header("1. Ingreso de Datos (Partidos, Cuotas y Selección de Base Manual)")
 
     col1, col2, col3 = st.columns(3)
     partidos = []
@@ -77,25 +77,29 @@ with tab1:
             cX = st.number_input(f"Cuota X (Empate)", min_value=1.01, value=3.20, step=0.05, key=f"cX_{idx}")
             c2 = st.number_input(f"Cuota 2 ({p_visitante})", min_value=1.01, value=3.50, step=0.05, key=f"c2_{idx}")
             
-            prob1, probX, prob2 = 1/c1, 1/cX, 1/c2
-            total_prob = prob1 + probX + prob2
-            p1_real, pX_real, p2_real = (prob1/total_prob)*100, (probX/total_prob)*100, (prob2/total_prob)*100
+            # Selector Manual de la Opción Base
+            opciones_partido = [f"1 ({p_local})", "X (Empate)", f"2 ({p_visitante})"]
             
-            if c1 <= c2 and c1 <= cX:
-                base_sugerida = f"1 ({p_local})"
+            base_elegida = st.selectbox(
+                f"🎯 Tu Opción Base P{idx}:",
+                options=opciones_partido,
+                index=0,
+                key=f"base_man_{idx}"
+            )
+
+            # Cuota de la base seleccionada
+            if "1" in base_elegida:
                 cuota_base = c1
-            elif c2 <= c1 and c2 <= cX:
-                base_sugerida = f"2 ({p_visitante})"
+            elif "2" in base_elegida:
                 cuota_base = c2
             else:
-                base_sugerida = "X (Empate)"
                 cuota_base = cX
 
             st.markdown(
                 f"""
                 <div style="background-color: #E8F5E9; border-radius: 8px; padding: 8px; margin-top: 10px; border: 1px solid #A5D6A7;">
-                    <p style="margin:0; color:#2E7D32; font-weight:bold; font-size:13px;">🤖 Recomendación Base:</p>
-                    <p style="margin:0; font-size:13px;"><b>{base_sugerida}</b> @ {cuota_base:.2f}</p>
+                    <p style="margin:0; color:#2E7D32; font-weight:bold; font-size:13px;">📌 Base Seleccionada:</p>
+                    <p style="margin:0; font-size:13px;"><b>{base_elegida}</b> @ {cuota_base:.2f}</p>
                 </div>
                 """,
                 unsafe_allow_html=True
@@ -104,8 +108,7 @@ with tab1:
             partidos.append({
                 "local": p_local, "visitante": p_visitante, "vs": f"{p_local} vs {p_visitante}",
                 "c1": c1, "cX": cX, "c2": c2,
-                "opcion_base": base_sugerida, "cuota_base": cuota_base,
-                "p1_prob": p1_real, "pX_prob": pX_real, "p2_prob": p2_real
+                "opcion_base": base_elegida, "cuota_base": cuota_base
             })
 
     # BOLETOS 8 Y 9
@@ -116,10 +119,23 @@ with tab1:
     opciones_p2 = [f"1 ({partidos[1]['local']})", "X (Empate)", f"2 ({partidos[1]['visitante']})"]
     opciones_p3 = [f"1 ({partidos[2]['local']})", "X (Empate)", f"2 ({partidos[2]['visitante']})"]
 
+    def op_sorpresa(p):
+        if "1" in p["opcion_base"]:
+            return f"2 ({p['visitante']})"
+        elif "2" in p["opcion_base"]:
+            return f"1 ({p['local']})"
+        else:
+            return f"1 ({p['local']})"
+
     if auto_pilot:
-        b8_p1, b8_p2, b8_p3 = "X (Empate)", "X (Empate)", partidos[2]["opcion_base"]
-        def op_sorpresa(p): return f"2 ({p['visitante']})" if "1" in p["opcion_base"] else f"1 ({p['local']})"
-        b9_p1, b9_p2, b9_p3 = op_sorpresa(partidos[0]), op_sorpresa(partidos[1]), op_sorpresa(partidos[2])
+        # Si la base es Empate, la cobertura ajusta a 1
+        b8_p1 = "X (Empate)" if "X" not in partidos[0]["opcion_base"] else f"1 ({partidos[0]['local']})"
+        b8_p2 = "X (Empate)" if "X" not in partidos[1]["opcion_base"] else f"1 ({partidos[1]['local']})"
+        b8_p3 = partidos[2]["opcion_base"]
+        
+        b9_p1 = op_sorpresa(partidos[0])
+        b9_p2 = op_sorpresa(partidos[1])
+        b9_p3 = op_sorpresa(partidos[2])
     else:
         col_b8, col_b9 = st.columns(2)
         with col_b8:
@@ -139,13 +155,20 @@ with tab1:
 
     st.success(f"💡 Inversión Total (9 Boletos): *{inversion_total:.2f}€* ({stake_unidad:.2f}€ por apuesta individual dentro de Trixie)")
 
-    # CÁLCULO EN TIEMPO REAL (SIN ESPERAR A UN BOTÓN)
+    # CÁLCULO Y GENERACIÓN EN TIEMPO REAL
     boletos_data = []
 
     def obtener_cuota(p_dict, sel_texto):
         if "1" in sel_texto: return p_dict["c1"]
         elif "2" in sel_texto: return p_dict["c2"]
         else: return p_dict["cX"]
+
+    def obtener_empate_o_cobertura(p_dict):
+        # Si la base elegida es X, la cobertura busca el 1
+        if "X" in p_dict["opcion_base"]:
+            return f"1 ({p_dict['local']})"
+        else:
+            return "X (Empate)"
 
     def agregar_boleto(num, tipo, sel1, sel2, sel3):
         c1 = obtener_cuota(partidos[0], sel1)
@@ -178,15 +201,15 @@ with tab1:
         })
 
     op_b1, op_b2, op_b3 = partidos[0]["opcion_base"], partidos[1]["opcion_base"], partidos[2]["opcion_base"]
-    def inv_op(p): return f"2 ({p['visitante']})" if "1" in p["opcion_base"] else f"1 ({p['local']})"
 
+    # Generación dinámica basada en la selección manual del usuario
     agregar_boleto(1, "🔥 BASE PRINCIPAL", op_b1, op_b2, op_b3)
-    agregar_boleto(2, "🛡️ Cobertura Empate P1", "X (Empate)", op_b2, op_b3)
-    agregar_boleto(3, "🛡️ Cobertura Empate P2", op_b1, "X (Empate)", op_b3)
-    agregar_boleto(4, "🛡️ Cobertura Empate P3", op_b1, op_b2, "X (Empate)")
-    agregar_boleto(5, "⚡ Cobertura Sorpresa P1", inv_op(partidos[0]), op_b2, op_b3)
-    agregar_boleto(6, "⚡ Cobertura Sorpresa P2", op_b1, inv_op(partidos[1]), op_b3)
-    agregar_boleto(7, "⚡ Cobertura Sorpresa P3", op_b1, op_b2, inv_op(partidos[2]))
+    agregar_boleto(2, "🛡️ Cobertura Secundario P1", obtener_empate_o_cobertura(partidos[0]), op_b2, op_b3)
+    agregar_boleto(3, "🛡️ Cobertura Secundario P2", op_b1, obtener_empate_o_cobertura(partidos[1]), op_b3)
+    agregar_boleto(4, "🛡️ Cobertura Secundario P3", op_b1, op_b2, obtener_empate_o_cobertura(partidos[2]))
+    agregar_boleto(5, "⚡ Cobertura Sorpresa P1", op_sorpresa(partidos[0]), op_b2, op_b3)
+    agregar_boleto(6, "⚡ Cobertura Sorpresa P2", op_b1, op_sorpresa(partidos[1]), op_b3)
+    agregar_boleto(7, "⚡ Cobertura Sorpresa P3", op_b1, op_b2, op_sorpresa(partidos[2]))
     agregar_boleto(8, "🎯 Cierre Libre 1", b8_p1, b8_p2, b8_p3)
     agregar_boleto(9, "🚀 Cierre Libre 2", b9_p1, b9_p2, b9_p3)
 
