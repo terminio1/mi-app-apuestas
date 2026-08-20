@@ -139,156 +139,153 @@ with tab1:
 
     st.success(f"💡 Inversión Total (9 Boletos): *{inversion_total:.2f}€* ({stake_unidad:.2f}€ por apuesta individual dentro de Trixie)")
 
-    # GENERAR MATRIZ
-    if st.button("🚀 Calcular Matriz Completa y Simulador Dominó", use_container_width=True):
-        boletos_data = []
+    # CÁLCULO EN TIEMPO REAL (SIN ESPERAR A UN BOTÓN)
+    boletos_data = []
 
-        def obtener_cuota(p_dict, sel_texto):
-            if "1" in sel_texto: return p_dict["c1"]
-            elif "2" in sel_texto: return p_dict["c2"]
-            else: return p_dict["cX"]
+    def obtener_cuota(p_dict, sel_texto):
+        if "1" in sel_texto: return p_dict["c1"]
+        elif "2" in sel_texto: return p_dict["c2"]
+        else: return p_dict["cX"]
 
-        def agregar_boleto(num, tipo, sel1, sel2, sel3):
-            c1 = obtener_cuota(partidos[0], sel1)
-            c2 = obtener_cuota(partidos[1], sel2)
-            c3 = obtener_cuota(partidos[2], sel3)
+    def agregar_boleto(num, tipo, sel1, sel2, sel3):
+        c1 = obtener_cuota(partidos[0], sel1)
+        c2 = obtener_cuota(partidos[1], sel2)
+        c3 = obtener_cuota(partidos[2], sel3)
+        
+        d12 = c1 * c2
+        d13 = c1 * c3
+        d23 = c2 * c3
+        triple = c1 * c2 * c3
+        
+        pago_dobles = (d12 + d13 + d23) * stake_unidad
+        pago_trixie = (d12 + d13 + d23 + triple) * stake_unidad
+        
+        boletos_data.append({
+            "ID": num,
+            "Boleto": f"Boleto {num}",
+            "Estrategia": tipo,
+            f"P1: {partidos[0]['vs']}": f"{sel1} ({c1:.2f})",
+            f"P2: {partidos[1]['vs']}": f"{sel2} ({c2:.2f})",
+            f"P3: {partidos[2]['vs']}": f"{sel3} ({c3:.2f})",
+            "Cobro Dobles (€)": round(pago_dobles, 2),
+            "Cobro Trixie (€)": round(pago_trixie, 2),
+            "c1": c1, "c2": c2, "c3": c3,
+            "sel1": sel1, "sel2": sel2, "sel3": sel3,
+            "d12_val": round(d12 * stake_unidad, 2),
+            "d13_val": round(d13 * stake_unidad, 2),
+            "d23_val": round(d23 * stake_unidad, 2),
+            "triple_val": round(triple * stake_unidad, 2)
+        })
+
+    op_b1, op_b2, op_b3 = partidos[0]["opcion_base"], partidos[1]["opcion_base"], partidos[2]["opcion_base"]
+    def inv_op(p): return f"2 ({p['visitante']})" if "1" in p["opcion_base"] else f"1 ({p['local']})"
+
+    agregar_boleto(1, "🔥 BASE PRINCIPAL", op_b1, op_b2, op_b3)
+    agregar_boleto(2, "🛡️ Cobertura Empate P1", "X (Empate)", op_b2, op_b3)
+    agregar_boleto(3, "🛡️ Cobertura Empate P2", op_b1, "X (Empate)", op_b3)
+    agregar_boleto(4, "🛡️ Cobertura Empate P3", op_b1, op_b2, "X (Empate)")
+    agregar_boleto(5, "⚡ Cobertura Sorpresa P1", inv_op(partidos[0]), op_b2, op_b3)
+    agregar_boleto(6, "⚡ Cobertura Sorpresa P2", op_b1, inv_op(partidos[1]), op_b3)
+    agregar_boleto(7, "⚡ Cobertura Sorpresa P3", op_b1, op_b2, inv_op(partidos[2]))
+    agregar_boleto(8, "🎯 Cierre Libre 1", b8_p1, b8_p2, b8_p3)
+    agregar_boleto(9, "🚀 Cierre Libre 2", b9_p1, b9_p2, b9_p3)
+
+    st.session_state["matriz_actual"] = boletos_data
+    st.session_state["inversion_actual"] = inversion_total
+    st.session_state["partidos_actuales"] = partidos
+    st.session_state["stake_unidad"] = stake_unidad
+
+    df_matriz = pd.DataFrame(st.session_state["matriz_actual"])
+    
+    st.markdown("---")
+    st.header("📋 Matriz de 9 Boletos Generada")
+    cols_ocultar = ["c1", "c2", "c3", "sel1", "sel2", "sel3", "d12_val", "d13_val", "d23_val", "triple_val", "ID"]
+    df_vista = df_matriz.drop(columns=[c for c in cols_ocultar if c in df_matriz.columns])
+    st.dataframe(df_vista, use_container_width=True)
+
+    # SIMULADOR EN TIEMPO REAL
+    st.markdown("---")
+    st.header("🔮 Simulador y Desglose del Efecto Dominó")
+    
+    boleto_ganador_id = st.selectbox(
+        "Selecciona qué Boleto acertó los 3 partidos:",
+        options=[b["ID"] for b in st.session_state["matriz_actual"]],
+        format_func=lambda x: f"Boleto {x} ({st.session_state['matriz_actual'][x-1]['Estrategia']})"
+    )
+
+    b_ganador = st.session_state["matriz_actual"][boleto_ganador_id - 1]
+
+    d12_v = round((b_ganador["c1"] * b_ganador["c2"]) * stake_unidad, 2)
+    d13_v = round((b_ganador["c1"] * b_ganador["c3"]) * stake_unidad, 2)
+    d23_v = round((b_ganador["c2"] * b_ganador["c3"]) * stake_unidad, 2)
+    trip_v = round((b_ganador["c1"] * b_ganador["c2"] * b_ganador["c3"]) * stake_unidad, 2)
+    
+    st.subheader(f"📊 Desglose de Ganancias para Boleto {boleto_ganador_id}")
+    
+    c1_col, c2_col, c3_col, c4_col = st.columns(4)
+    c1_col.metric(f"Doble 1 (P1 @{b_ganador['c1']:.2f} x P2 @{b_ganador['c2']:.2f})", f"{d12_v:.2f}€")
+    c2_col.metric(f"Doble 2 (P1 @{b_ganador['c1']:.2f} x P3 @{b_ganador['c3']:.2f})", f"{d13_v:.2f}€")
+    c3_col.metric(f"Doble 3 (P2 @{b_ganador['c2']:.2f} x P3 @{b_ganador['c3']:.2f})", f"{d23_v:.2f}€")
+    c4_col.metric("Triple Trixie", f"{trip_v:.2f}€")
+
+    suma_dobles_otros = 0.0
+    detalles_rescate = []
+    for b in st.session_state["matriz_actual"]:
+        if b["ID"] != boleto_ganador_id:
+            m1 = (b["sel1"] == b_ganador["sel1"])
+            m2 = (b["sel2"] == b_ganador["sel2"])
+            m3 = (b["sel3"] == b_ganador["sel3"])
             
-            d12 = c1 * c2
-            d13 = c1 * c3
-            d23 = c2 * c3
-            triple = c1 * c2 * c3
+            sum_b = 0
+            if m1 and m2: sum_b += (b["c1"] * b["c2"]) * stake_unidad
+            if m1 and m3: sum_b += (b["c1"] * b["c3"]) * stake_unidad
+            if m2 and m3: sum_b += (b["c2"] * b["c3"]) * stake_unidad
             
-            pago_dobles = (d12 + d13 + d23) * stake_unidad
-            pago_trixie = (d12 + d13 + d23 + triple) * stake_unidad
-            
-            boletos_data.append({
-                "ID": num,
-                "Boleto": f"Boleto {num}",
-                "Estrategia": tipo,
-                f"P1: {partidos[0]['vs']}": f"{sel1} ({c1:.2f})",
-                f"P2: {partidos[1]['vs']}": f"{sel2} ({c2:.2f})",
-                f"P3: {partidos[2]['vs']}": f"{sel3} ({c3:.2f})",
-                "Cobro Dobles (€)": round(pago_dobles, 2),
-                "Cobro Trixie (€)": round(pago_trixie, 2),
-                "c1": c1, "c2": c2, "c3": c3,
-                "sel1": sel1, "sel2": sel2, "sel3": sel3,
-                "d12_val": round(d12 * stake_unidad, 2),
-                "d13_val": round(d13 * stake_unidad, 2),
-                "d23_val": round(d23 * stake_unidad, 2),
-                "triple_val": round(triple * stake_unidad, 2)
-            })
+            if sum_b > 0:
+                suma_dobles_otros += sum_b
+                detalles_rescate.append(f"• *Boleto {b['ID']}*: aporta {sum_b:.2f}€ por compartir 2 aciertos.")
 
-        op_b1, op_b2, op_b3 = partidos[0]["opcion_base"], partidos[1]["opcion_base"], partidos[2]["opcion_base"]
-        def inv_op(p): return f"2 ({p['visitante']})" if "1" in p["opcion_base"] else f"1 ({p['local']})"
+    cobro_trixie_ganador = d12_v + d13_v + d23_v + trip_v
+    cobro_total_simulado = cobro_trixie_ganador + suma_dobles_otros
+    neto_simulado = cobro_total_simulado - inversion_total
 
-        agregar_boleto(1, "🔥 BASE PRINCIPAL", op_b1, op_b2, op_b3)
-        agregar_boleto(2, "🛡️ Cobertura Empate P1", "X (Empate)", op_b2, op_b3)
-        agregar_boleto(3, "🛡️ Cobertura Empate P2", op_b1, "X (Empate)", op_b3)
-        agregar_boleto(4, "🛡️ Cobertura Empate P3", op_b1, op_b2, "X (Empate)")
-        agregar_boleto(5, "⚡ Cobertura Sorpresa P1", inv_op(partidos[0]), op_b2, op_b3)
-        agregar_boleto(6, "⚡ Cobertura Sorpresa P2", op_b1, inv_op(partidos[1]), op_b3)
-        agregar_boleto(7, "⚡ Cobertura Sorpresa P3", op_b1, op_b2, inv_op(partidos[2]))
-        agregar_boleto(8, "🎯 Cierre Libre 1", b8_p1, b8_p2, b8_p3)
-        agregar_boleto(9, "🚀 Cierre Libre 2", b9_p1, b9_p2, b9_p3)
+    st.markdown("*Efecto Dominó en Coberturas:*")
+    if detalles_rescate:
+        for d in detalles_rescate:
+            st.markdown(d)
+    else:
+        st.write("Ningún otro boleto comparte 2 aciertos exactos con esta combinación.")
 
-        st.session_state["matriz_actual"] = boletos_data
-        st.session_state["inversion_actual"] = inversion_total
-        st.session_state["partidos_actuales"] = partidos
-        st.session_state["stake_unidad"] = stake_unidad
+    res_c1, res_c2, res_c3 = st.columns(3)
+    res_c1.metric("Cobro Trixie Ganador", f"{cobro_trixie_ganador:.2f}€")
+    res_c2.metric("Rescate Dobles (Otros Boletos)", f"{suma_dobles_otros:.2f}€")
+    res_c3.metric("🔥 GRAN TOTAL A COBRAR", f"{cobro_total_simulado:.2f}€", delta=f"{neto_simulado:+.2f}€ Neto")
 
-    if "matriz_actual" in st.session_state:
-        df_matriz = pd.DataFrame(st.session_state["matriz_actual"])
+    # GUARDAR EN HISTORIAL
+    st.markdown("---")
+    st.subheader("💾 Guardar esta Jornada en tu Historial")
+    col_g1, col_g2, col_g3 = st.columns(3)
+    
+    with col_g1:
+        nombre_jornada = st.text_input("Nombre / Fecha de la Jornada", value=f"Jornada {len(st.session_state['historial_apuestas']) + 1}")
+    with col_g2:
+        resultado_final = st.selectbox("Resultado de la Apuesta", ["Ganada (Victoria)", "Perdida", "Recuperación Parcial"])
+    with col_g3:
+        monto_cobrado_real = st.number_input("Monto Real Cobrado (€)", value=float(round(cobro_total_simulado, 2)))
+
+    if st.button("📌 Guardar en Historial"):
+        resumen_partidos = f"{partidos[0]['vs']} | {partidos[1]['vs']} | {partidos[2]['vs']}"
         
-        st.header("📋 Matriz de 9 Boletos Generada")
-        cols_ocultar = ["c1", "c2", "c3", "sel1", "sel2", "sel3", "d12_val", "d13_val", "d23_val", "triple_val", "ID"]
-        df_vista = df_matriz.drop(columns=[c for c in cols_ocultar if c in df_matriz.columns])
-        st.dataframe(df_vista, use_container_width=True)
-
-        # SIMULADOR Y EFECTO DOMINÓ
-        st.markdown("---")
-        st.header("🔮 Simulador y Desglose del Efecto Dominó")
-        
-        boleto_ganador_id = st.selectbox(
-            "Selecciona qué Boleto acertó los 3 partidos:",
-            options=[b["ID"] for b in st.session_state["matriz_actual"]],
-            format_func=lambda x: f"Boleto {x} ({st.session_state['matriz_actual'][x-1]['Estrategia']})"
-        )
-
-        b_ganador = st.session_state["matriz_actual"][boleto_ganador_id - 1]
-        st_unit = st.session_state.get("stake_unidad", stake_unidad)
-
-        d12_v = b_ganador.get("d12_val", round((b_ganador["c1"] * b_ganador["c2"]) * st_unit, 2))
-        d13_v = b_ganador.get("d13_val", round((b_ganador["c1"] * b_ganador["c3"]) * st_unit, 2))
-        d23_v = b_ganador.get("d23_val", round((b_ganador["c2"] * b_ganador["c3"]) * st_unit, 2))
-        trip_v = b_ganador.get("triple_val", round((b_ganador["c1"] * b_ganador["c2"] * b_ganador["c3"]) * st_unit, 2))
-        
-        st.subheader(f"📊 Desglose de Ganancias para Boleto {boleto_ganador_id}")
-        
-        c1_col, c2_col, c3_col, c4_col = st.columns(4)
-        c1_col.metric("Doble 1 (P1 x P2)", f"{d12_v:.2f}€")
-        c2_col.metric("Doble 2 (P1 x P3)", f"{d13_v:.2f}€")
-        c3_col.metric("Doble 3 (P2 x P3)", f"{d23_v:.2f}€")
-        c4_col.metric("Triple Trixie (P1 x P2 x P3)", f"{trip_v:.2f}€")
-
-        suma_dobles_otros = 0.0
-        detalles_rescate = []
-        for b in st.session_state["matriz_actual"]:
-            if b["ID"] != boleto_ganador_id:
-                m1 = (b["sel1"] == b_ganador["sel1"])
-                m2 = (b["sel2"] == b_ganador["sel2"])
-                m3 = (b["sel3"] == b_ganador["sel3"])
-                
-                sum_b = 0
-                if m1 and m2: sum_b += (b["c1"] * b["c2"]) * st_unit
-                if m1 and m3: sum_b += (b["c1"] * b["c3"]) * st_unit
-                if m2 and m3: sum_b += (b["c2"] * b["c3"]) * st_unit
-                
-                if sum_b > 0:
-                    suma_dobles_otros += sum_b
-                    detalles_rescate.append(f"• *Boleto {b['ID']}*: aporta {sum_b:.2f}€ por compartir 2 aciertos.")
-
-        cobro_trixie_ganador = b_ganador["Cobro Trixie (€)"]
-        cobro_total_simulado = cobro_trixie_ganador + suma_dobles_otros
-        neto_simulado = cobro_total_simulado - st.session_state["inversion_actual"]
-
-        st.markdown("*Efecto Dominó en Coberturas:*")
-        if detalles_rescate:
-            for d in detalles_rescate:
-                st.markdown(d)
-        else:
-            st.write("Ningún otro boleto comparte 2 aciertos exactos con esta combinación.")
-
-        res_c1, res_c2, res_c3 = st.columns(3)
-        res_c1.metric("Cobro Trixie Ganador", f"{cobro_trixie_ganador:.2f}€")
-        res_c2.metric("Rescate Dobles (Otros Boletos)", f"{suma_dobles_otros:.2f}€")
-        res_c3.metric("🔥 GRAN TOTAL A COBRAR", f"{cobro_total_simulado:.2f}€", delta=f"{neto_simulado:+.2f}€ Neto")
-
-        # GUARDAR EN HISTORIAL
-        st.markdown("---")
-        st.subheader("💾 Guardar esta Jornada en tu Historial")
-        col_g1, col_g2, col_g3 = st.columns(3)
-        
-        with col_g1:
-            nombre_jornada = st.text_input("Nombre / Fecha de la Jornada", value=f"Jornada {len(st.session_state['historial_apuestas']) + 1}")
-        with col_g2:
-            resultado_final = st.selectbox("Resultado de la Apuesta", ["Ganada (Victoria)", "Perdida", "Recuperación Parcial"])
-        with col_g3:
-            monto_cobrado_real = st.number_input("Monto Real Cobrado (€)", value=float(round(cobro_total_simulado, 2)))
-
-        if st.button("📌 Guardar en Historial"):
-            p_act = st.session_state["partidos_actuales"]
-            resumen_partidos = f"{p_act[0]['vs']} | {p_act[1]['vs']} | {p_act[2]['vs']}"
-            
-            st.session_state["historial_apuestas"].append({
-                "Fecha": datetime.now().strftime("%Y-%m-%d"),
-                "Jornada": nombre_jornada,
-                "Equipos / Partidos": resumen_partidos,
-                "Inversión (€)": st.session_state["inversion_actual"],
-                "Cobrado (€)": monto_cobrado_real,
-                "Beneficio (€)": round(monto_cobrado_real - st.session_state["inversion_actual"], 2),
-                "Estado": resultado_final
-            })
-            st.success("¡Jornada guardada correctamente!")
+        st.session_state["historial_apuestas"].append({
+            "Fecha": datetime.now().strftime("%Y-%m-%d"),
+            "Jornada": nombre_jornada,
+            "Equipos / Partidos": resumen_partidos,
+            "Inversión (€)": inversion_total,
+            "Cobrado (€)": monto_cobrado_real,
+            "Beneficio (€)": round(monto_cobrado_real - inversion_total, 2),
+            "Estado": resultado_final
+        })
+        st.success("¡Jornada guardada correctamente!")
 
 # PESTAÑA 2: HISTORIAL Y EXPORTACIÓN
 with tab2:
@@ -349,10 +346,10 @@ with tab2:
             st_u = st.session_state.get("stake_unidad", 2.5)
             detalles_excel = []
             for b in st.session_state["matriz_actual"]:
-                d12_e = b.get("d12_val", round((b["c1"] * b["c2"]) * st_u, 2))
-                d13_e = b.get("d13_val", round((b["c1"] * b["c3"]) * st_u, 2))
-                d23_e = b.get("d23_val", round((b["c2"] * b["c3"]) * st_u, 2))
-                trip_e = b.get("triple_val", round((b["c1"] * b["c2"] * b["c3"]) * st_u, 2))
+                d12_e = round((b["c1"] * b["c2"]) * st_u, 2)
+                d13_e = round((b["c1"] * b["c3"]) * st_u, 2)
+                d23_e = round((b["c2"] * b["c3"]) * st_u, 2)
+                trip_e = round((b["c1"] * b["c2"] * b["c3"]) * st_u, 2)
                 
                 detalles_excel.append({
                     "Boleto": b["Boleto"],
@@ -367,7 +364,7 @@ with tab2:
                     "Cobro Doble 2 (P1xP3) (€)": d13_e,
                     "Cobro Doble 3 (P2xP3) (€)": d23_e,
                     "Cobro Triple Trixie (€)": trip_e,
-                    "TOTAL TRIXIE COMPLETO (€)": round(b["Cobro Trixie (€)"], 2)
+                    "TOTAL TRIXIE COMPLETO (€)": round(d12_e + d13_e + d23_e + trip_e, 2)
                 })
             df_mat_excel = pd.DataFrame(detalles_excel)
             df_mat_excel.to_excel(wb, sheet_name='Matriz_Detallada_Boletos', index=False)
@@ -377,7 +374,6 @@ with tab2:
         buffer.seek(0)
         workbook = openpyxl.load_workbook(buffer)
 
-        # ESTILOS MEJORADOS (ESTÉTICA MODERNA VERDE + FILAS CEBRA)
         header_fill = PatternFill(start_color="1B5E20", end_color="1B5E20", fill_type="solid")
         header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
         zebra_fill = PatternFill(start_color="F1F8E9", end_color="F1F8E9", fill_type="solid")
@@ -388,13 +384,11 @@ with tab2:
                              bottom=Side(style='thin', color='C8E6C9'))
 
         for sheet in workbook.worksheets:
-            # Encabezado
             for cell in sheet[1]:
                 cell.fill = header_fill
                 cell.font = header_font
                 cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
-            # Celdas y Filas Cebra
             for row_idx, row in enumerate(sheet.iter_rows(min_row=2), start=2):
                 fill_color = zebra_fill if row_idx % 2 == 0 else white_fill
                 for cell in row:
@@ -404,7 +398,6 @@ with tab2:
                     if isinstance(cell.value, (int, float)):
                         cell.number_format = '#,##0.00 €'
 
-            # Ancho de Columnas
             for col in sheet.columns:
                 max_len = max(len(str(cell.value or '')) for cell in col)
                 col_letter = get_column_letter(col[0].column)
